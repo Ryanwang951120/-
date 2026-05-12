@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台灣電費曲線比較</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-1: #e8f6ff;
+      --bg-2: #fff8ef;
+      --panel: rgba(255, 255, 255, 0.82);
+      --ink: #1b2a3a;
+      --muted: #5e6c78;
+      --line-main: #0d98ba;
+      --line-custom: #ff6f3d;
+      --accent: #114b5f;
+      --ok: #0a8754;
+      --warn: #bd3d00;
+      --ring: rgba(17, 75, 95, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Noto Sans TC", sans-serif;
+      background:
+        radial-gradient(circle at 8% 10%, #bde7ff 0, transparent 22%),
+        radial-gradient(circle at 90% 0%, #ffe3c5 0, transparent 20%),
+        linear-gradient(135deg, var(--bg-1), var(--bg-2));
+      padding: 28px 16px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    .panel {
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.65);
+      border-radius: 18px;
+      box-shadow: 0 14px 40px rgba(20, 40, 60, 0.08);
+      padding: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+      font-size: clamp(1.4rem, 2.8vw, 2.2rem);
+      letter-spacing: 0.02em;
+    }
+
+    p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      align-items: end;
+    }
+
+    .control {
+      display: grid;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 0.93rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    input[type="number"],
+    input[type="range"],
+    select {
+      width: 100%;
+    }
+
+    input[type="number"],
+    select {
+      border: 1px solid #bfd8e4;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.98rem;
+      background: #fff;
+      color: var(--ink);
+      outline: none;
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    input[type="number"]:focus,
+    select:focus {
+      border-color: #5aa7c1;
+      box-shadow: 0 0 0 4px var(--ring);
+    }
+
+    .radio-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .radio-chip {
+      border: 1px solid #bfd8e4;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: #fff;
+      font-size: 0.9rem;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s ease;
+    }
+
+    .radio-chip.active {
+      background: #114b5f;
+      color: #fff;
+      border-color: #114b5f;
+      transform: translateY(-1px);
+    }
+
+    .chart-wrap {
+      min-height: 420px;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .kpi {
+      border-radius: 14px;
+      padding: 14px;
+      background: #fff;
+      border: 1px solid #d8e6ee;
+    }
+
+    .kpi h3 {
+      margin: 0 0 4px;
+      font-size: 0.94rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .kpi strong {
+      font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+      font-size: clamp(1.2rem, 2.5vw, 1.8rem);
+      letter-spacing: 0.01em;
+    }
+
+    .good {
+      color: var(--ok);
+    }
+
+    .bad {
+      color: var(--warn);
+    }
+
+    .footnote {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    @media (max-width: 900px) {
+      .controls {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .result-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-wrap {
+        min-height: 320px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .controls {
+        grid-template-columns: 1fr;
+      }
+
+      .panel {
+        padding: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <section class="panel">
+      <h1>台灣電費曲線比較器</h1>
+      <p>
+        藍線是台電住宅累進電價（依夏月或非夏月），橘線是你輸入的自訂每度電價。
+        X 軸為用電度數，Y 軸為估算月電費（元）。
+      </p>
+    </section>
+
+    <section class="panel">
+      <div class="controls">
+        <div class="control">
+          <label>季節費率</label>
+          <div class="radio-group" id="seasonChips">
+            <button class="radio-chip active" data-season="summer" type="button">夏月（6-9月）</button>
+            <button class="radio-chip" data-season="nonSummer" type="button">非夏月</button>
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="customRate">自訂每度電價（元/度）</label>
+          <input id="customRate" type="number" min="0" step="0.01" value="4" />
+        </div>
+
+        <div class="control">
+          <label for="maxUsage">圖表最大用電（度）</label>
+          <input id="maxUsage" type="number" min="100" max="5000" step="50" value="1500" />
+        </div>
+
+        <div class="control">
+          <label for="focusUsage">比較用電（度）</label>
+          <input id="focusUsage" type="number" min="1" max="5000" step="1" value="350" />
+        </div>
+      </div>
+    </section>
+
+    <section class="panel chart-wrap">
+      <canvas id="billChart" aria-label="電費曲線圖"></canvas>
+    </section>
+
+    <section class="panel">
+      <div class="result-grid">
+        <article class="kpi">
+          <h3>台電估算電費</h3>
+          <strong id="taipowerBill">$0</strong>
+        </article>
+        <article class="kpi">
+          <h3>自訂費率估算</h3>
+          <strong id="customBill">$0</strong>
+        </article>
+        <article class="kpi">
+          <h3>差額（自訂 - 台電）</h3>
+          <strong id="billDiff">$0</strong>
+        </article>
+      </div>
+      <p class="footnote">此工具為視覺化估算，不含代收、附加費、營業稅等其他費用。</p>
+    </section>
+  </main>
+
+  <script>
+    const tiers = {
+      summer: [
+        { limit: 120, rate: 1.68 },
+        { limit: 330, rate: 2.45 },
+        { limit: 500, rate: 3.7 },
+        { limit: 700, rate: 5.04 },
+        { limit: 1000, rate: 6.24 },
+        { limit: Infinity, rate: 8.46 }
+      ],
+      nonSummer: [
+        { limit: 120, rate: 1.68 },
+        { limit: 330, rate: 2.16 },
+        { limit: 500, rate: 3.03 },
+        { limit: 700, rate: 4.14 },
+        { limit: 1000, rate: 5.07 },
+        { limit: Infinity, rate: 6.63 }
+      ]
+    };
+
+    const seasonChips = document.getElementById("seasonChips");
+    const customRateInput = document.getElementById("customRate");
+    const maxUsageInput = document.getElementById("maxUsage");
+    const focusUsageInput = document.getElementById("focusUsage");
+    const taipowerBillEl = document.getElementById("taipowerBill");
+    const customBillEl = document.getElementById("customBill");
+    const billDiffEl = document.getElementById("billDiff");
+
+    let season = "summer";
+
+    function calculateTieredBill(usage, seasonKey) {
+      const seasonTiers = tiers[seasonKey];
+      let remain = Math.max(0, usage);
+      let total = 0;
+      let prevLimit = 0;
+
+      for (const tier of seasonTiers) {
+        if (remain <= 0) break;
+        const bucket = Math.min(remain, tier.limit - prevLimit);
+        total += bucket * tier.rate;
+        remain -= bucket;
+        prevLimit = tier.limit;
+      }
+
+      return total;
+    }
+
+    function generateData(maxUsage, customRate, seasonKey) {
+      const labels = [];
+      const taipowerData = [];
+      const customData = [];
+      const step = maxUsage <= 1000 ? 10 : 20;
+
+      for (let u = 0; u <= maxUsage; u += step) {
+        labels.push(u);
+        taipowerData.push(calculateTieredBill(u, seasonKey));
+        customData.push(u * customRate);
+      }
+
+      return { labels, taipowerData, customData };
+    }
+
+    const ctx = document.getElementById("billChart");
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: "台電累進電價",
+            data: [],
+            borderColor: "#0d98ba",
+            backgroundColor: "rgba(13, 152, 186, 0.1)",
+            borderWidth: 3,
+            pointRadius: 0,
+            tension: 0.28
+          },
+          {
+            label: "自訂費率",
+            data: [],
+            borderColor: "#ff6f3d",
+            backgroundColor: "rgba(255, 111, 61, 0.08)",
+            borderWidth: 3,
+            pointRadius: 0,
+            tension: 0.15
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: "index",
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            labels: {
+              usePointStyle: true,
+              pointStyle: "line",
+              padding: 20,
+              font: {
+                family: "Noto Sans TC",
+                size: 12
+              }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label(context) {
+                return `${context.dataset.label}: ${context.parsed.y.toFixed(0)} 元`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: "用電度數（度）",
+              font: { family: "Noto Sans TC", size: 12 }
+            },
+            grid: {
+              color: "rgba(20, 80, 100, 0.08)"
+            }
+          },
+          y: {
+            title: {
+              display: true,
+              text: "估算月電費（元）",
+              font: { family: "Noto Sans TC", size: 12 }
+            },
+            grid: {
+              color: "rgba(20, 80, 100, 0.08)"
+            },
+            ticks: {
+              callback(value) {
+                return `${value}`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    function currency(value) {
+      return `$${Math.round(value).toLocaleString("zh-TW")}`;
+    }
+
+    function updateKpis(customRate) {
+      const focus = Number(focusUsageInput.value) || 0;
+      const taiBill = calculateTieredBill(focus, season);
+      const customBill = focus * customRate;
+      const diff = customBill - taiBill;
+
+      taipowerBillEl.textContent = currency(taiBill);
+      customBillEl.textContent = currency(customBill);
+      billDiffEl.textContent = `${diff >= 0 ? "+" : "-"}${currency(Math.abs(diff)).replace("$", "$")}`;
+      billDiffEl.className = diff <= 0 ? "good" : "bad";
+    }
+
+    function refresh() {
+      const customRate = Math.max(0, Number(customRateInput.value) || 0);
+      const maxUsage = Math.min(5000, Math.max(100, Number(maxUsageInput.value) || 100));
+      const focus = Math.min(maxUsage, Math.max(1, Number(focusUsageInput.value) || 1));
+
+      maxUsageInput.value = maxUsage;
+      focusUsageInput.value = focus;
+
+      const data = generateData(maxUsage, customRate, season);
+      chart.data.labels = data.labels;
+      chart.data.datasets[0].data = data.taipowerData;
+      chart.data.datasets[1].data = data.customData;
+      chart.update();
+
+      updateKpis(customRate);
+    }
+
+    seasonChips.addEventListener("click", (e) => {
+      const chip = e.target.closest("button[data-season]");
+      if (!chip) return;
+
+      season = chip.dataset.season;
+      for (const btn of seasonChips.querySelectorAll("button")) {
+        btn.classList.toggle("active", btn === chip);
+      }
+      refresh();
+    });
+
+    [customRateInput, maxUsageInput, focusUsageInput].forEach((el) => {
+      el.addEventListener("input", refresh);
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
